@@ -41,8 +41,6 @@ class DAS:
 class MulDAS(DAS):
     def __init__(self, file_list) -> None:
         self.file_list = file_list
-        #self.data = None
-        #self.meta_data = dict()
         self._get_data()
     def _get_data(self):
         data_combined = None
