@@ -1,17 +1,17 @@
 import numpy as np
 import h5py
-import matplotlib.pyplot as plt
 from scipy import signal
 from queue import Queue
+import Utilities
 
 class DAS:
     def __init__(self, file, select_channels=None) -> None:
         self.file = file
         self.data = None
         self.meta_data = dict()
+        self.meta_data['time'] = str( Utilities.parse_datetime_from_filename(self.file) )
         self.select_channels = select_channels
         self._get_data()
-        self.ani = None
 
     # To do: need to be able to read different type of das files
     def _get_data(self):
@@ -25,22 +25,32 @@ class DAS:
             self.meta_data['fs'] = fs = fp['Acquisition/Raw[0]'].attrs["OutputDataRate"]
             self.meta_data['dt'] = 1.0 / fs
     def plot(self, start_time=None, end_time=None, title=None):
-        self.ani = plot_das_data(process_data(self.data), self.select_channels, self.meta_data['dx'], self.meta_data['dt'], 
-                      start_time, end_time, title)
-        #self.ani
+        Utilities.plot_das_data(process_data(self.data), self.select_channels, self.meta_data['dx'], self.meta_data['dt'], 
+                      start_time, end_time, self.meta_data['time'])
     def _select_channels(self, data, channels):
         return data[channels, :]
         
-
+# need a red-black tree for insert and order new file(date, file)
+# rb tree (date), dict (date: file), time complexity O(log n)
+# or can sort the dict directly, time complexity O(n log n)
+# think: 
+# 1. separate _get_meta_data from _get_data, or could be an parameter of _get_data
+# 2. a normal get_data function outside of the DAS class (could make the class easier to read)
+# 3. Given a MulDAS obj. How to find next file? (in order to do a waterfall movie) 
+# Should have a file list in the begining, and process files in chunk way.
+# 4. Consider not reading all files
 class MulDAS(DAS):
     def __init__(self, file_list, select_channels=None) -> None:
         self.file_list = file_list
+        self.time_file = self._create_time_file_dict()
         self.select_channels = select_channels
         self._get_data()
+        #self.meta_data['time'] = f"{parse_datetime_from_filename(self.file_list[0])[0:13]}:00"
     def _get_data(self):
         data_combined = None
         i = 0 
-        for file in self.file_list:
+        #### ORDER 
+        for t, file in self.time_file.items():
             if self.select_channels is not None:
                 DAS_temp = DAS(file, self.select_channels)
             else:
@@ -53,31 +63,21 @@ class MulDAS(DAS):
                 data_combined = np.concatenate([data_combined, data_temp], axis=1)
             i += 1
         self.data = data_combined
+
+    def _create_time_file_dict(self):
+        return Utilities.create_time_file_dict(self.file_list)
+        
     def append(self, file_list):
         pass
-        
 
 
-def plot_das_data(data, channels, dx, dt, start_time=None, end_time=None, title=None):
-    nx, nt = data.shape
-    x = channels * dx
-    t = np.arange(nt) * dt
 
-    if start_time is not None and end_time is not None:
-        time_indices = (t >= start_time) & (t <= end_time)
-        data = data[:, time_indices]
-        t = t[time_indices]
-    #plt.ioff()
-    fig, ax = plt.subplots()
-    ani = ax.imshow(normalize(data).T, cmap="seismic", vmin=-1, vmax=1, aspect="auto", 
-               extent=[x[0], x[-1], t[-1], t[0]], interpolation="none", animated=True)
-    ax.set_xlabel("Channel Number")
-    ax.set_ylabel("Time (s)")
-    ax.set_title(title)
-    return ani.get_array()
-    #fig.show()
+#class MulDAS2(DAS):
+
+
 
 # queue element(DAS obj) with stride parameter 
+
 
 
 # should put this to Utilities.py and add more flexibility
@@ -88,5 +88,3 @@ def process_data(data):
     data_filtered = signal.sosfilt(sos, data_detrend)
     return data_filtered
 
-epsilon = 1e-8
-normalize = lambda x: (x - np.mean(x, axis=-1, keepdims=True)) / (np.std(x, axis=-1, keepdims=True) + epsilon)
