@@ -45,7 +45,8 @@ class MulDAS(DAS):
         self.time_file = self._create_time_file_dict()
         self.select_channels = select_channels
         self._get_data()
-        #self.meta_data['time'] = f"{parse_datetime_from_filename(self.file_list[0])[0:13]}:00"
+        self.start_time = list(self.time_file)[0]#.strftime('%H:%M:%S, %m/%d, %Y')
+        self.ani = None
     def _get_data(self):
         data_combined = None
         i = 0 
@@ -67,8 +68,10 @@ class MulDAS(DAS):
     def _create_time_file_dict(self):
         return Utilities.create_time_file_dict(self.file_list)
         
-    def append(self, file_list):
-        pass
+    def animate_heatmap(self, window_length, stride, interval=1000):
+        if self.ani is None:
+            self.ani_data = Utilities.make_ani_data(process_data(self.data), self.meta_data['dx'], self.meta_data['dt'], window_length=window_length, stride=stride)
+        self.ani = Utilities.animate_heatmap(self.ani_data, self.select_channels, self.meta_data['dx'], self.meta_data['dt'], interval=interval, st=self.start_time, stride=stride)
 
 
 
