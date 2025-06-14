@@ -24,9 +24,27 @@ class DAS:
             self.meta_data['dx'] = fp["Acquisition"].attrs["SpatialSamplingInterval"]
             self.meta_data['fs'] = fs = fp['Acquisition/Raw[0]'].attrs["OutputDataRate"]
             self.meta_data['dt'] = 1.0 / fs
-    def plot(self, start_time=None, end_time=None, title=None):
-        Utilities.plot_das_data(process_data(self.data), self.select_channels, self.meta_data['dx'], self.meta_data['dt'], 
-                      start_time, end_time, self.meta_data['time'])
+    def plot(self, start_time=None, end_time=None, title=None, data_source=None, deck_splits=None, deck_names=None, fs=2000, target_fs=None,
+             velocity_line=None):
+        processed_data = process_data(self.data, fs, target_fs)
+    
+        if target_fs is not None:
+            dt = 1.0 / target_fs
+        else:
+            dt = self.meta_data['dt']
+            
+        Utilities.plot_das_data(processed_data, self.select_channels, self.meta_data['dx'], dt, 
+            start_time, end_time, self.meta_data['time'], data_source, deck_splits, deck_names, velocity_line)
+
+    def plot_single(self, ch, start_time, end_time, fs=2000, target_fs=None):
+        processed_data = process_data(self.data, fs, target_fs)
+    
+        if target_fs is not None:
+            dt = 1.0 / target_fs
+        else:
+            dt = self.meta_data['dt']
+        Utilities.plot_single(processed_data, ch, self.meta_data['dx'], dt, start_time, end_time)
+        
     def _select_channels(self, data, channels):
         return data[channels, :]
         
@@ -69,9 +87,10 @@ class MulDAS(DAS):
         return Utilities.create_time_file_dict(self.file_list)
         
     def animate_heatmap(self, window_length, stride, interval=1000):
-        if self.ani is None:
-            self.ani_data = Utilities.make_ani_data(process_data(self.data), self.meta_data['dx'], self.meta_data['dt'], window_length=window_length, stride=stride)
-        self.ani = Utilities.animate_heatmap(self.ani_data, self.select_channels, self.meta_data['dx'], self.meta_data['dt'], interval=interval, st=self.start_time, stride=stride)
+        self.ani_data = Utilities.make_ani_data(process_data(self.data), self.meta_data['dx'], self.meta_data['dt'], 
+                                                window_length=window_length, stride=stride)
+        self.ani = Utilities.animate_heatmap(self.ani_data, self.select_channels, self.meta_data['dx'], self.meta_data['dt'], 
+                                             interval=interval, st=self.start_time, stride=stride)
 
 
 
@@ -85,9 +104,14 @@ class MulDAS(DAS):
 
 # should put this to Utilities.py and add more flexibility
 # Check what DASpy do for preprocessing
-def process_data(data):
+def process_data(data, fs=2000, target_fs=None):
     data_detrend = signal.detrend(data, type='linear')
-    sos = signal.butter(5, [20,100], 'bandpass', fs=500, output='sos')
+    sos = signal.butter(5, [1,20], 'bandpass', fs=2000, output='sos')
     data_filtered = signal.sosfilt(sos, data_detrend)
+
+    # Step 3: Optional Downsampling
+    if target_fs is not None:
+        data_filtered = Utilities.downsample_data(data_filtered, fs, target_fs)
+    
     return data_filtered
 
